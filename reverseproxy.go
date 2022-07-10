@@ -32,6 +32,9 @@ func Proxy(table ReverseTable) app.HandlerFunc {
 			c.Request.SetHeader("X-Forwarded-Host", c.Request.Header.Get("Host"))
 			u := fmt.Sprintf("%s://%s%s", "http", dst, string(c.Request.RequestURI()))
 			proxyReq, err := http.NewRequest(string(c.Request.Method()), u, bytes.NewReader(c.Request.Body()))
+			c.Request.Header.VisitAll(func(key, value []byte) {
+				proxyReq.Header.Set(string(key), string(value))
+			})
 			resp, err := client.Do(proxyReq)
 			if err != nil {
 				c.Abort()
