@@ -5,16 +5,16 @@ reverseproxy for Hertz [WIP]
 
 ## Getting started
 
-```
+```bash
 1. Download swag by using:
 ```sh
 $ go get github.com/hertz-contrib/reverseproxy
 ```
-```
+
 
 ## usage
 
-```
+```go
 func main() {
 	h := server.Default(server.WithHostPorts("127.0.0.1:8080"))
 	h.Use(reverseproxy.Proxy(map[string]string{
