@@ -23,7 +23,6 @@ import (
 	"net/textproto"
 	"reflect"
 	"strings"
-	"sync"
 	"unsafe"
 
 	"github.com/cloudwego/hertz/pkg/app"
@@ -37,7 +36,7 @@ import (
 type ReverseProxy struct {
 	client *client.Client
 
-	// Target is set as a reverse proxy address
+	// target is set as a reverse proxy address
 	Target string
 
 	// director must be a function which modifies the request
@@ -64,8 +63,6 @@ type ReverseProxy struct {
 	// If nil, the default is to log the provided error and return
 	// a 502 Status Bad Gateway response.
 	errorHandler func(*app.RequestContext, error)
-
-	sync.RWMutex
 }
 
 // Hop-by-hop headers. These are removed when sent to the backend.
@@ -96,7 +93,7 @@ func NewSingleHostReverseProxy(target string, options ...config.ClientOption) (*
 	r := &ReverseProxy{
 		Target: target,
 		director: func(req *protocol.Request) {
-			req.SetRequestURI(b2s(joinURLPath(req, target)))
+			req.SetRequestURI(b2s(JoinURLPath(req, target)))
 			req.Header.SetHostBytes(req.URI().Host())
 		},
 	}
@@ -108,10 +105,11 @@ func NewSingleHostReverseProxy(target string, options ...config.ClientOption) (*
 	return r, nil
 }
 
-func joinURLPath(req *protocol.Request, target string) (path []byte) {
+func JoinURLPath(req *protocol.Request, target string) (path []byte) {
 	aslash := req.URI().Path()[0] == '/'
 	var bslash bool
-	if strings.HasPrefix(target, "http") || strings.HasPrefix(target, "sd") {
+	if strings.HasPrefix(target, "http") {
+		// absolute path
 		bslash = strings.HasSuffix(target, "/")
 	} else {
 		// default redirect to local
@@ -212,7 +210,7 @@ func (r *ReverseProxy) ServeHTTP(c context.Context, ctx *app.RequestContext) {
 	}
 	err := r.client.Do(c, req, resp)
 	if err != nil {
-		hlog.CtxErrorf(c, "client request error: %#v", err.Error())
+		hlog.CtxErrorf(c, "HERTZ: Client request error: %#v", err.Error())
 		r.getErrorHandler()(ctx, err)
 		return
 	}
@@ -249,14 +247,10 @@ func (r *ReverseProxy) SetModifyResponse(mr func(*protocol.Response) error) {
 
 // SetErrorHandler use to customize error handler
 func (r *ReverseProxy) SetErrorHandler(eh func(c *app.RequestContext, err error)) {
-	r.Lock()
 	r.errorHandler = eh
-	r.Unlock()
 }
 
 func (r *ReverseProxy) getErrorHandler() func(c *app.RequestContext, err error) {
-	r.RLock()
-	defer r.RUnlock()
 	if r.errorHandler != nil {
 		return r.errorHandler
 	}

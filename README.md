@@ -1,90 +1,87 @@
 # reverseproxy (This is a community driven project)
-English | [中文](README_CN.md)
 
-Hertz middleware to enable `reserve proxy` support.
+`reserve proxy` extension for Hertz
 
-## Usage
+## Quick Start
 
-Download and install it:
-
-```sh
-go get github.com/hertz-contrib/reverseproxy
-```
-
-Import it in your code:
-
-```go
-import "github.com/hertz-contrib/reverseproxy"
-```
-
-Canonical example:
 ```go
 package main
 
 import (
-	"context"
-	"crypto/tls"
-	"fmt"
-	"github.com/cloudwego/hertz/pkg/protocol"
-	
-	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/cloudwego/hertz/pkg/app/client"
 	"github.com/cloudwego/hertz/pkg/app/server"
-	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/hertz-contrib/reverseproxy"
 )
 
 func main() {
-	h := server.Default(server.WithHostPorts("127.0.0.1:8000"))
-	// simple
-	proxy1, _ := reverseproxy.NewSingleHostReverseProxy("http://127.0.0.1:8000/proxy")
-	// with tls
-	proxy2, _ := reverseproxy.NewSingleHostReverseProxy("https://www.baidu.com",
-		client.WithTLSConfig(&tls.Config{
-			MinVersion: tls.VersionTLS12,
-			MaxVersion: tls.VersionTLS12,
-		}),
-	)
-	// customize error handler
-	proxy3, _ := reverseproxy.NewSingleHostReverseProxy("http://127.0.0.1:8000/proxy")
-	proxy3.SetErrorHandler(func(c *app.RequestContext, err error) {
-		err = fmt.Errorf("fake 404 not found")
-		c.Response.SetStatusCode(404)
-		c.String(404, "fake 404 not found")
-	})
-	
-	// modify response
-	proxy4, _ := reverseproxy.NewSingleHostReverseProxy("http://127.0.0.1:8000/proxy")
-	proxy4.SetModifyResponse(func(resp *protocol.Response) error {
-		resp.SetStatusCode(200)
-		resp.SetBodyRaw([]byte("change response success"))
-		return nil
-	})
-	h.GET("/proxy/fake", func(cc context.Context, c *app.RequestContext) {
-		c.GetConn().Close()
-	})
-	h.GET("/proxy/backend", func(cc context.Context, c *app.RequestContext) {
-		if param := c.Query("who"); param != "" {
-			c.JSON(200, utils.H{
-				"who": param,
-				"msg": "proxy success!!",
-			})
-		} else {
-			c.JSON(200, utils.H{
-				"msg": "proxy success!!",
-			})
-		}
-	})
-	h.GET("/proxy/changeResponse", func(cc context.Context, c *app.RequestContext) {
-		c.String(200, "normal response")
-	})
-	
-	h.GET("/", proxy2.ServeHTTP)
-	h.GET("/fake", proxy3.ServeHTTP)
-	h.GET("/backend", proxy1.ServeHTTP)
-	h.GET("/changeResponse", proxy4.ServeHTTP)
+	h := server.New()
+	rp, _ := reverseproxy.NewSingleHostReverseProxy("http://localhost:8082/test")
+	h.GET("/ping", rp.ServeHTTP)
 	h.Spin()
 }
-
 ```
 
+### Use tls
+
+Currently [netpoll](https://github.com/cloudwego/netpoll) does not support tls，we need to use the `net` (standard library)
+
+```go
+package main
+
+import (
+	"github.com/cloudwego/hertz/pkg/app/client"
+	"github.com/cloudwego/hertz/pkg/app/server"
+	"github.com/cloudwego/hertz/pkg/network/standard"
+	"github.com/hertz-contrib/reverseproxy"
+)
+
+func main() {
+	h := server.New()
+	rp, _ := reverseproxy.NewSingleHostReverseProxy("https://localhost:8082/test",client.WithDialer(standard.NewDialer()))
+	h.GET("/ping", rp.ServeHTTP)
+	h.Spin()
+}
+```
+
+### Use service discovery
+
+Use `nacos` as example and more information refer to [registry](https://github.com/hertz-contrib/registry)
+
+```go
+package main
+
+import (
+	"github.com/cloudwego/hertz/pkg/app/client"
+	"github.com/cloudwego/hertz/pkg/app/middlewares/client/sd"
+	"github.com/cloudwego/hertz/pkg/app/server"
+	"github.com/cloudwego/hertz/pkg/common/config"
+	"github.com/cloudwego/hertz/pkg/protocol"
+	"github.com/hertz-contrib/registry/nacos"
+	"github.com/hertz-contrib/reverseproxy"
+)
+
+func main() {
+	cli, err := client.NewClient()
+	if err != nil{
+		panic(err)
+	}
+	r, err := nacos.NewDefaultNacosResolver()
+	if err != nil{
+		panic(err)
+	}
+	cli.Use(sd.Discovery(r))
+	h := server.New()
+	rp, _ := reverseproxy.NewSingleHostReverseProxy("http://test.demo.api/test")
+	rp.SetClient(cli)
+	rp.SetDirector(func(req *protocol.Request){
+		req.SetRequestURI(string(reverseproxy.JoinURLPath(req, rp.Target)))
+		req.Header.SetHostBytes(req.URI().Host())
+		req.Options().Apply([]config.RequestOption{config.WithSD(true)})
+	})
+	h.GET("/ping", rp.ServeHTTP)
+	h.Spin()
+}
+```
+
+### Request/Response
+
+`ReverseProxy` provides `SetDirector`、`SetModifyResponse`、`SetErrorHandler` to modify `Request` and `Response`.

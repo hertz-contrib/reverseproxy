@@ -35,7 +35,6 @@ const fakeHopHeader = "X-Fake-Hop-Header-For-Test"
 const fakeConnectionToken = "X-Fake-Connection-Token"
 
 func init() {
-	// inOurTests = true
 	hopHeaders = append(hopHeaders, fakeHopHeader)
 	hopHeaders = append(hopHeaders, fakeConnectionToken)
 }
@@ -405,12 +404,6 @@ func TestReverseProxy_Post(t *testing.T) {
 	}
 }
 
-type RoundTripperFunc func(*http.Request) (*http.Response, error)
-
-func (fn RoundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
-	return fn(req)
-}
-
 func TestReverseProxyModifyResponse(t *testing.T) {
 	r := server.New(server.WithHostPorts("127.0.0.1:9997"))
 
@@ -464,50 +457,23 @@ func TestReverseProxyErrorHandler(t *testing.T) {
 		ctx.GetConn().Close()
 	})
 	proxy, _ := NewSingleHostReverseProxy("http://127.0.0.1:9998/proxy")
+	proxy.SetErrorHandler(func(c *app.RequestContext, err error) {
+		c.Response.Header.SetStatusCode(http.StatusTeapot)
+	})
+	proxy.SetModifyResponse(func(res *protocol.Response) error {
+		res.SetStatusCode(res.StatusCode() + 1)
+		return errors.New("some error to trigger errorHandler")
+	})
 	r.POST("/backend", proxy.ServeHTTP)
 	go r.Spin()
 	time.Sleep(time.Second)
-
-	tests := []struct {
-		name           string
-		wantCode       int
-		errorHandler   func(c *app.RequestContext, err error)
-		modifyResponse func(response *protocol.Response) error
-	}{
-		{
-			name:     "default",
-			wantCode: http.StatusBadGateway,
-		},
-		{
-			name:         "errorhandler",
-			wantCode:     http.StatusTeapot,
-			errorHandler: func(c *app.RequestContext, err error) { c.Response.Header.SetStatusCode(http.StatusTeapot) },
-		},
-		{
-			name: "modifyresponse_err",
-			modifyResponse: func(res *protocol.Response) error {
-				res.SetStatusCode(res.StatusCode() + 1)
-				return errors.New("some error to trigger errorHandler")
-			},
-			errorHandler: func(c *app.RequestContext, err error) { c.Response.Header.SetStatusCode(http.StatusTeapot) },
-			wantCode:     http.StatusTeapot,
-		},
-	}
 	cli, _ := client.NewClient()
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			proxy.modifyResponse = tt.modifyResponse
-			req := protocol.AcquireRequest()
-			req.SetMethod("POST")
-			resp := protocol.AcquireResponse()
-			req.SetRequestURI("http://localhost:9998/backend")
-			if tt.errorHandler != nil {
-				proxy.SetErrorHandler(tt.errorHandler)
-			}
-			cli.Do(context.Background(), req, resp)
-			if g, e := resp.StatusCode(), tt.wantCode; g != e {
-				t.Errorf("got res.StatusCode %d; expected %d", g, e)
-			}
-		})
+	req := protocol.AcquireRequest()
+	req.SetMethod("POST")
+	resp := protocol.AcquireResponse()
+	req.SetRequestURI("http://127.0.0.1:9998/backend")
+	cli.Do(context.Background(), req, resp)
+	if g, e := resp.StatusCode(), http.StatusTeapot; g != e {
+		t.Errorf("got res.StatusCode %d; expected %d", g, e)
 	}
 }
