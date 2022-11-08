@@ -97,6 +97,10 @@ var hopHeaders = []string{
 // NewSingleHostReverseProxy does not rewrite the Host header.
 // To rewrite Host headers, use ReverseProxy directly with a custom
 // director policy.
+//
+// Note: if no config.ClientOption is passed it will use the default global client.Client instance.
+// When passing config.ClientOption it will initialize a local client.Client instance.
+// Using ReverseProxy.SetClient if there is need for shared customized client.Client instance.
 func NewSingleHostReverseProxy(target string, options ...config.ClientOption) (*ReverseProxy, error) {
 	r := &ReverseProxy{
 		Target: target,
@@ -105,11 +109,13 @@ func NewSingleHostReverseProxy(target string, options ...config.ClientOption) (*
 			req.Header.SetHostBytes(req.URI().Host())
 		},
 	}
-	c, err := client.NewClient(options...)
-	if err != nil {
-		return nil, err
+	if len(options) != 0 {
+		c, err := client.NewClient(options...)
+		if err != nil {
+			return nil, err
+		}
+		r.client = c
 	}
-	r.client = c
 	return r, nil
 }
 
@@ -216,7 +222,11 @@ func (r *ReverseProxy) ServeHTTP(c context.Context, ctx *app.RequestContext) {
 			req.Header.Add("X-Forwarded-For", ip)
 		}
 	}
-	err := r.client.Do(c, req, resp)
+	fn := client.Do
+	if r.client != nil {
+		fn = r.client.Do
+	}
+	err := fn(c, req, resp)
 	if err != nil {
 		hlog.CtxErrorf(c, "HERTZ: Client request error: %#v", err.Error())
 		r.getErrorHandler()(ctx, err)
