@@ -44,6 +44,9 @@ import (
 type ReverseProxy struct {
 	client *client.Client
 
+	// includeXFF controls whether we should include the X-Forwarded-For header
+	includeXFF bool
+
 	// target is set as a reverse proxy address
 	Target string
 
@@ -108,6 +111,7 @@ func NewSingleHostReverseProxy(target string, options ...config.ClientOption) (*
 			req.SetRequestURI(b2s(JoinURLPath(req, target)))
 			req.Header.SetHostBytes(req.URI().Host())
 		},
+		includeXFF: true,
 	}
 	if len(options) != 0 {
 		c, err := client.NewClient(options...)
@@ -212,16 +216,19 @@ func (r *ReverseProxy) ServeHTTP(c context.Context, ctx *app.RequestContext) {
 		req.Header.DelBytes(s2b(h))
 	}
 
-	// prepare request(replace headers and some URL host)
-	if ip, _, err := net.SplitHostPort(ctx.RemoteAddr().String()); err == nil {
-		tmp := req.Header.Peek("X-Forwarded-For")
-		if len(tmp) > 0 {
-			ip = fmt.Sprintf("%s, %s", tmp, ip)
-		}
-		if tmp == nil || string(tmp) != "" {
-			req.Header.Add("X-Forwarded-For", ip)
+	if r.includeXFF {
+		// prepare request(replace headers and some URL host)
+		if ip, _, err := net.SplitHostPort(ctx.RemoteAddr().String()); err == nil {
+			tmp := req.Header.Peek("X-Forwarded-For")
+			if len(tmp) > 0 {
+				ip = fmt.Sprintf("%s, %s", tmp, ip)
+			}
+			if tmp == nil || string(tmp) != "" {
+				req.Header.Add("X-Forwarded-For", ip)
+			}
 		}
 	}
+
 	fn := client.Do
 	if r.client != nil {
 		fn = r.client.Do
@@ -266,6 +273,11 @@ func (r *ReverseProxy) SetModifyResponse(mr func(*protocol.Response) error) {
 // SetErrorHandler use to customize error handler
 func (r *ReverseProxy) SetErrorHandler(eh func(c *app.RequestContext, err error)) {
 	r.errorHandler = eh
+}
+
+// SetIncludeXFF use to set whether include `X-Forwarded-For` header
+func (r *ReverseProxy) SetIncludeXFF(include bool) {
+	r.includeXFF = include
 }
 
 func (r *ReverseProxy) getErrorHandler() func(c *app.RequestContext, err error) {
