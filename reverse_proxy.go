@@ -191,6 +191,18 @@ func removeResponseConnHeaders(c *app.RequestContext) {
 	})
 }
 
+// checkTeHeader check RequestHeader if has 'Te: trailers'
+// See https://github.com/golang/go/issues/21096
+func checkTeHeader(header *protocol.RequestHeader) bool {
+	teHeaders := header.PeekAll("Te")
+	for _, te := range teHeaders {
+		if bytes.Contains(te, []byte("trailers")) {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *ReverseProxy) defaultErrorHandler(c *app.RequestContext, _ error) {
 	c.Response.Header.SetStatusCode(consts.StatusBadGateway)
 }
@@ -204,12 +216,19 @@ func (r *ReverseProxy) ServeHTTP(c context.Context, ctx *app.RequestContext) {
 	}
 	req.Header.ResetConnectionClose()
 
+	hasTeTrailer := checkTeHeader(&req.Header)
+
 	removeRequestConnHeaders(ctx)
 	// Remove hop-by-hop headers to the backend. Especially
 	// important is "Connection" because we want a persistent
 	// connection, regardless of what the client sent to us.
 	for _, h := range hopHeaders {
 		req.Header.DelBytes(s2b(h))
+	}
+
+	// Check if 'trailers' exists in te header, If exists, add an additional Te header
+	if hasTeTrailer {
+		req.Header.Set("Te", "trailers")
 	}
 
 	// prepare request(replace headers and some URL host)

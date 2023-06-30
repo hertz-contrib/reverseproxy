@@ -40,8 +40,10 @@ import (
 )
 
 // Reverse proxy tests.
-const fakeHopHeader = "X-Fake-Hop-Header-For-Test"
-const fakeConnectionToken = "X-Fake-Connection-Token"
+const (
+	fakeHopHeader       = "X-Fake-Hop-Header-For-Test"
+	fakeConnectionToken = "X-Fake-Connection-Token"
+)
 
 func init() {
 	hopHeaders = append(hopHeaders, fakeHopHeader)
@@ -64,7 +66,9 @@ func TestReverseProxy(t *testing.T) {
 		if c := ctx.Request.Header.Get("Connection"); c != "" {
 			t.Errorf("handler got Connection header value %q", c)
 		}
-
+		if c := ctx.Request.Header.Get("Te"); c != "trailers" {
+			t.Errorf("handler got Te header value %q; want 'trailers'", c)
+		}
 		if c := ctx.Request.Header.Get("Upgrade"); c != "" {
 			t.Errorf("handler got Upgrade header value %q", c)
 		}
