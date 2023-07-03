@@ -47,6 +47,9 @@ type ReverseProxy struct {
 	// target is set as a reverse proxy address
 	Target string
 
+	// transforTrailer is whether to forward Trailer-related header
+	transferTrailer bool
+
 	// director must be a function which modifies the request
 	// into a new request. Its response is then redirected
 	// back to the original client unmodified.
@@ -216,18 +219,24 @@ func (r *ReverseProxy) ServeHTTP(c context.Context, ctx *app.RequestContext) {
 	}
 	req.Header.ResetConnectionClose()
 
-	hasTeTrailer := checkTeHeader(&req.Header)
+	hasTeTrailer := false
+	if r.transferTrailer {
+		hasTeTrailer = checkTeHeader(&req.Header)
+	}
 
 	removeRequestConnHeaders(ctx)
 	// Remove hop-by-hop headers to the backend. Especially
 	// important is "Connection" because we want a persistent
 	// connection, regardless of what the client sent to us.
 	for _, h := range hopHeaders {
+		if r.transferTrailer && h == "Trailer" {
+			continue
+		}
 		req.Header.DelBytes(s2b(h))
 	}
 
 	// Check if 'trailers' exists in te header, If exists, add an additional Te header
-	if hasTeTrailer {
+	if r.transferTrailer && hasTeTrailer {
 		req.Header.Set("Te", "trailers")
 	}
 
@@ -255,6 +264,9 @@ func (r *ReverseProxy) ServeHTTP(c context.Context, ctx *app.RequestContext) {
 	removeResponseConnHeaders(ctx)
 
 	for _, h := range hopHeaders {
+		if r.transferTrailer && h == "Trailer" {
+			continue
+		}
 		resp.Header.DelBytes(s2b(h))
 	}
 
@@ -285,6 +297,10 @@ func (r *ReverseProxy) SetModifyResponse(mr func(*protocol.Response) error) {
 // SetErrorHandler use to customize error handler
 func (r *ReverseProxy) SetErrorHandler(eh func(c *app.RequestContext, err error)) {
 	r.errorHandler = eh
+}
+
+func (r *ReverseProxy) SetTransferTrailer(b bool) {
+	r.transferTrailer = b
 }
 
 func (r *ReverseProxy) getErrorHandler() func(c *app.RequestContext, err error) {
