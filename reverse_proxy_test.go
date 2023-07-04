@@ -1,5 +1,5 @@
 /*
- *	Copyright 2022 CloudWeGo Authors
+ *	Copyright 2023 CloudWeGo Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@
  * license that can be found in the LICENSE file.
  *
  * This file may have been modified by CloudWeGo Authors. All CloudWeGo
- * Modifications are Copyright 2022 CloudWeGo Authors.
+ * Modifications are Copyright 2023 CloudWeGo Authors.
  */
 
 package reverseproxy
@@ -40,8 +40,10 @@ import (
 )
 
 // Reverse proxy tests.
-const fakeHopHeader = "X-Fake-Hop-Header-For-Test"
-const fakeConnectionToken = "X-Fake-Connection-Token"
+const (
+	fakeHopHeader       = "X-Fake-Hop-Header-For-Test"
+	fakeConnectionToken = "X-Fake-Connection-Token"
+)
 
 func init() {
 	hopHeaders = append(hopHeaders, fakeHopHeader)
@@ -484,5 +486,73 @@ func TestReverseProxyErrorHandler(t *testing.T) {
 	cli.Do(context.Background(), req, resp)
 	if g, e := resp.StatusCode(), http.StatusTeapot; g != e {
 		t.Errorf("got res.StatusCode %d; expected %d", g, e)
+	}
+}
+
+func TestReverseProxyTransferTrailer(t *testing.T) {
+	const backendResponse = "I am the backend"
+	r := server.New(server.WithHostPorts("127.0.0.1:9999"), server.WithStreamBody(true))
+
+	r.GET("/proxy/backend", func(cc context.Context, ctx *app.RequestContext) {
+		if c := ctx.Request.Header.Get("Te"); c != "trailers" {
+			t.Errorf("handler got Te header value %q; want 'trailers'", c)
+		}
+
+		if c := ctx.Request.Header.Get("Trailer"); c != "X-Trailer" {
+			t.Errorf("handler got Trailer header value %q; want 'X-Trailer'", c)
+		}
+
+		if g, e := string(ctx.Request.Body()), backendResponse; g != e {
+			t.Errorf("got body %q; expected %q", g, e)
+		}
+
+		if c := ctx.Request.Header.Trailer().Get("X-Trailer"); c != "trailer_value" {
+			t.Errorf("handler got X-Trailer Trailer value %q; want 'trailer_value'", c)
+		}
+
+		ctx.Response.Header.Set("Trailer", "X-Trailer")
+		ctx.Response.Header.Trailer().Set("X-Trailer", "trailer_value")
+		ctx.Response.SetBodyStream(strings.NewReader(backendResponse), -1)
+	})
+
+	proxy, err := NewSingleHostReverseProxy("http://127.0.0.1:9999/proxy", client.WithResponseBodyStream(true))
+	if err != nil {
+		t.Errorf("proxy error: %v", err)
+	}
+	proxy.SetTransferTrailer(true)
+
+	r.GET("/backend", func(c context.Context, ctx *app.RequestContext) {
+		proxy.ServeHTTP(c, ctx)
+	})
+	go r.Spin()
+	time.Sleep(time.Second)
+	cli, _ := client.NewClient(client.WithResponseBodyStream(true))
+	req := protocol.AcquireRequest()
+	res := protocol.AcquireResponse()
+	req.Header.Set("Connection", "close, TE")
+	req.Header.Add("Te", "foo")
+	req.Header.Add("Te", "bar, trailers")
+	req.Header.Set("Proxy-Connection", "should be deleted")
+	req.Header.Set("Upgrade", "foo")
+	req.Header.Trailer().Set("X-Trailer", "trailer_value")
+	req.SetConnectionClose()
+	req.SetHost("some-name")
+	req.SetRequestURI("http://localhost:9999/backend")
+	req.SetBodyStream(strings.NewReader(backendResponse), -1)
+	cli.Do(context.Background(), req, res)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+
+	if h := res.Header.Get("Trailer"); h != "X-Trailer" {
+		t.Errorf("header Trailer = %q; want %q", h, "X-Trailer")
+	}
+
+	if g, e := string(res.Body()), backendResponse; g != e {
+		t.Errorf("got body %q; expected %q", g, e)
+	}
+
+	if c := res.Header.Trailer().Get("X-Trailer"); c != "trailer_value" {
+		t.Errorf("handler got X-Trailer Trailer value %q; want 'trailer_value'", c)
 	}
 }

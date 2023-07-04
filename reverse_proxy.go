@@ -1,5 +1,5 @@
 /*
- *	Copyright 2022 CloudWeGo Authors
+ *	Copyright 2023 CloudWeGo Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@
  * license that can be found in the LICENSE file.
  *
  * This file may have been modified by CloudWeGo Authors. All CloudWeGo
- * Modifications are Copyright 2022 CloudWeGo Authors.
+ * Modifications are Copyright 2023 CloudWeGo Authors.
  */
 
 package reverseproxy
@@ -46,6 +46,9 @@ type ReverseProxy struct {
 
 	// target is set as a reverse proxy address
 	Target string
+
+	// transforTrailer is whether to forward Trailer-related header
+	transferTrailer bool
 
 	// director must be a function which modifies the request
 	// into a new request. Its response is then redirected
@@ -191,6 +194,18 @@ func removeResponseConnHeaders(c *app.RequestContext) {
 	})
 }
 
+// checkTeHeader check RequestHeader if has 'Te: trailers'
+// See https://github.com/golang/go/issues/21096
+func checkTeHeader(header *protocol.RequestHeader) bool {
+	teHeaders := header.PeekAll("Te")
+	for _, te := range teHeaders {
+		if bytes.Contains(te, []byte("trailers")) {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *ReverseProxy) defaultErrorHandler(c *app.RequestContext, _ error) {
 	c.Response.Header.SetStatusCode(consts.StatusBadGateway)
 }
@@ -204,12 +219,25 @@ func (r *ReverseProxy) ServeHTTP(c context.Context, ctx *app.RequestContext) {
 	}
 	req.Header.ResetConnectionClose()
 
+	hasTeTrailer := false
+	if r.transferTrailer {
+		hasTeTrailer = checkTeHeader(&req.Header)
+	}
+
 	removeRequestConnHeaders(ctx)
 	// Remove hop-by-hop headers to the backend. Especially
 	// important is "Connection" because we want a persistent
 	// connection, regardless of what the client sent to us.
 	for _, h := range hopHeaders {
+		if r.transferTrailer && h == "Trailer" {
+			continue
+		}
 		req.Header.DelBytes(s2b(h))
+	}
+
+	// Check if 'trailers' exists in te header, If exists, add an additional Te header
+	if r.transferTrailer && hasTeTrailer {
+		req.Header.Set("Te", "trailers")
 	}
 
 	// prepare request(replace headers and some URL host)
@@ -236,6 +264,9 @@ func (r *ReverseProxy) ServeHTTP(c context.Context, ctx *app.RequestContext) {
 	removeResponseConnHeaders(ctx)
 
 	for _, h := range hopHeaders {
+		if r.transferTrailer && h == "Trailer" {
+			continue
+		}
 		resp.Header.DelBytes(s2b(h))
 	}
 
@@ -266,6 +297,10 @@ func (r *ReverseProxy) SetModifyResponse(mr func(*protocol.Response) error) {
 // SetErrorHandler use to customize error handler
 func (r *ReverseProxy) SetErrorHandler(eh func(c *app.RequestContext, err error)) {
 	r.errorHandler = eh
+}
+
+func (r *ReverseProxy) SetTransferTrailer(b bool) {
+	r.transferTrailer = b
 }
 
 func (r *ReverseProxy) getErrorHandler() func(c *app.RequestContext, err error) {
