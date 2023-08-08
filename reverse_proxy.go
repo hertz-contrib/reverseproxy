@@ -214,6 +214,17 @@ func (r *ReverseProxy) ServeHTTP(c context.Context, ctx *app.RequestContext) {
 	req := &ctx.Request
 	resp := &ctx.Response
 
+	// save tmp resp header
+	respTmpHeader := map[string][]string{}
+	resp.Header.SetNoDefaultContentType(true)
+	resp.Header.VisitAll(func(key, value []byte) {
+		if _, ok := respTmpHeader[b2s(key)]; ok {
+			respTmpHeader[b2s(key)] = []string{b2s(value)}
+		} else {
+			respTmpHeader[b2s(key)] = append(respTmpHeader[b2s(key)], b2s(value))
+		}
+	})
+
 	if r.director != nil {
 		r.director(&ctx.Request)
 	}
@@ -259,6 +270,13 @@ func (r *ReverseProxy) ServeHTTP(c context.Context, ctx *app.RequestContext) {
 		hlog.CtxErrorf(c, "HERTZ: Client request error: %#v", err.Error())
 		r.getErrorHandler()(ctx, err)
 		return
+	}
+
+	// add tmp resp header
+	for key, hs := range respTmpHeader {
+		for _, h := range hs {
+			resp.Header.Add(key, h)
+		}
 	}
 
 	removeResponseConnHeaders(ctx)
