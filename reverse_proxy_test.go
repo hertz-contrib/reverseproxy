@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/cloudwego/hertz/pkg/common/test/assert"
 	"net/http"
 	"strings"
 	"testing"
@@ -555,4 +556,35 @@ func TestReverseProxyTransferTrailer(t *testing.T) {
 	if c := res.Header.Trailer().Get("X-Trailer"); c != "trailer_value" {
 		t.Errorf("handler got X-Trailer Trailer value %q; want 'trailer_value'", c)
 	}
+}
+
+func TestReverseProxySaveRespHeader(t *testing.T) {
+	const backendResponse = "I am the backend"
+	const backendStatus = 404
+	r := server.New(server.WithHostPorts("127.0.0.1:9997"))
+
+	r.GET("/proxy/backend", func(cc context.Context, ctx *app.RequestContext) {
+		ctx.Data(backendStatus, "application/json", []byte(backendResponse))
+	})
+
+	proxy, err := NewSingleHostReverseProxy("http://127.0.0.1:9997/proxy")
+	if err != nil {
+		t.Errorf("proxy error: %v", err)
+	}
+
+	r.GET("/backend", func(c context.Context, ctx *app.RequestContext) {
+		ctx.Response.Header.Set("aaa", "bbb")
+		proxy.ServeHTTP(c, ctx)
+	})
+	go r.Spin()
+	time.Sleep(time.Second)
+	cli, _ := client.NewClient()
+	req := protocol.AcquireRequest()
+	res := protocol.AcquireResponse()
+	req.SetRequestURI("http://localhost:9997/backend")
+	err = cli.Do(context.Background(), req, res)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	assert.DeepEqual(t, "bbb", res.Header.Get("aaa"))
 }
