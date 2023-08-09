@@ -28,11 +28,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/cloudwego/hertz/pkg/common/test/assert"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/cloudwego/hertz/pkg/common/test/assert"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/app/client"
