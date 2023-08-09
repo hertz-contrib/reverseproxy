@@ -218,10 +218,12 @@ func (r *ReverseProxy) ServeHTTP(c context.Context, ctx *app.RequestContext) {
 	respTmpHeader := map[string][]string{}
 	resp.Header.SetNoDefaultContentType(true)
 	resp.Header.VisitAll(func(key, value []byte) {
-		if _, ok := respTmpHeader[b2s(key)]; ok {
-			respTmpHeader[b2s(key)] = []string{b2s(value)}
+		keyStr := string(key)
+		valueStr := string(value)
+		if _, ok := respTmpHeader[keyStr]; ok {
+			respTmpHeader[keyStr] = []string{valueStr}
 		} else {
-			respTmpHeader[b2s(key)] = append(respTmpHeader[b2s(key)], b2s(value))
+			respTmpHeader[keyStr] = append(respTmpHeader[keyStr], valueStr)
 		}
 	})
 
