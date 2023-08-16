@@ -47,8 +47,11 @@ type ReverseProxy struct {
 	// target is set as a reverse proxy address
 	Target string
 
-	// transforTrailer is whether to forward Trailer-related header
+	// transferTrailer is whether to forward Trailer-related header
 	transferTrailer bool
+
+	// saveOriginResponse is whether to save the original response header
+	saveOriginResHeader bool
 
 	// director must be a function which modifies the request
 	// into a new request. Its response is then redirected
@@ -216,16 +219,18 @@ func (r *ReverseProxy) ServeHTTP(c context.Context, ctx *app.RequestContext) {
 
 	// save tmp resp header
 	respTmpHeader := map[string][]string{}
-	resp.Header.SetNoDefaultContentType(true)
-	resp.Header.VisitAll(func(key, value []byte) {
-		keyStr := string(key)
-		valueStr := string(value)
-		if _, ok := respTmpHeader[keyStr]; ok {
-			respTmpHeader[keyStr] = []string{valueStr}
-		} else {
-			respTmpHeader[keyStr] = append(respTmpHeader[keyStr], valueStr)
-		}
-	})
+	if r.saveOriginResHeader {
+		resp.Header.SetNoDefaultContentType(true)
+		resp.Header.VisitAll(func(key, value []byte) {
+			keyStr := string(key)
+			valueStr := string(value)
+			if _, ok := respTmpHeader[keyStr]; ok {
+				respTmpHeader[keyStr] = []string{valueStr}
+			} else {
+				respTmpHeader[keyStr] = append(respTmpHeader[keyStr], valueStr)
+			}
+		})
+	}
 
 	if r.director != nil {
 		r.director(&ctx.Request)
@@ -321,6 +326,10 @@ func (r *ReverseProxy) SetErrorHandler(eh func(c *app.RequestContext, err error)
 
 func (r *ReverseProxy) SetTransferTrailer(b bool) {
 	r.transferTrailer = b
+}
+
+func (r *ReverseProxy) SetSaveOriginResHeader(b bool) {
+	r.saveOriginResHeader = b
 }
 
 func (r *ReverseProxy) getErrorHandler() func(c *app.RequestContext, err error) {
