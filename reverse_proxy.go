@@ -224,7 +224,7 @@ func (r *ReverseProxy) ServeHTTP(c context.Context, ctx *app.RequestContext) {
 		resp.Header.VisitAll(func(key, value []byte) {
 			keyStr := string(key)
 			valueStr := string(value)
-			if _, ok := respTmpHeader[keyStr]; ok {
+			if _, ok := respTmpHeader[keyStr]; !ok {
 				respTmpHeader[keyStr] = []string{valueStr}
 			} else {
 				respTmpHeader[keyStr] = append(respTmpHeader[keyStr], valueStr)
