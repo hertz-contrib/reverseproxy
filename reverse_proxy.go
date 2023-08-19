@@ -31,6 +31,7 @@ import (
 	"net/textproto"
 	"reflect"
 	"strings"
+	"sync"
 	"unsafe"
 
 	"github.com/cloudwego/hertz/pkg/app"
@@ -213,12 +214,18 @@ func (r *ReverseProxy) defaultErrorHandler(c *app.RequestContext, _ error) {
 	c.Response.Header.SetStatusCode(consts.StatusBadGateway)
 }
 
+var respTmpHeaderPool = sync.Pool{
+	New: func() interface{} {
+		return make(map[string][]string)
+	},
+}
+
 func (r *ReverseProxy) ServeHTTP(c context.Context, ctx *app.RequestContext) {
 	req := &ctx.Request
 	resp := &ctx.Response
 
 	// save tmp resp header
-	respTmpHeader := map[string][]string{}
+	respTmpHeader := respTmpHeaderPool.Get().(map[string][]string)
 	if r.saveOriginResHeader {
 		resp.Header.SetNoDefaultContentType(true)
 		resp.Header.VisitAll(func(key, value []byte) {
@@ -285,6 +292,12 @@ func (r *ReverseProxy) ServeHTTP(c context.Context, ctx *app.RequestContext) {
 			resp.Header.Add(key, h)
 		}
 	}
+
+	// Clear and put respTmpHeader back to respTmpHeaderPool
+	for k := range respTmpHeader {
+		delete(respTmpHeader, k)
+	}
+	respTmpHeaderPool.Put(respTmpHeader)
 
 	removeResponseConnHeaders(ctx)
 
