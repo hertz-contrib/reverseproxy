@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"github.com/gorilla/websocket"
 	"io"
 	"net/http"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/cloudwego/hertz/pkg/protocol"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
+	"github.com/gorilla/websocket"
 	hzws "github.com/hertz-contrib/websocket"
 )
 
@@ -33,10 +33,9 @@ func NewWSReverseProxy(target string, opts ...Option) *WSReverseProxy {
 }
 
 func (w *WSReverseProxy) ServeHTTP(ctx context.Context, c *app.RequestContext) {
-	// TODO: print log if it's already ws conn
 	forwardHeader := prepareForwardHeader(ctx, c)
 	// customer Director will overwrite existed header if they have the same header key
-	if w.options.dialer != nil {
+	if w.options.director != nil {
 		appendHeader := w.options.director(ctx, c)
 		appendHeader.VisitAll(func(key, value []byte) {
 			forwardHeader.SetBytesKV(key, value)
