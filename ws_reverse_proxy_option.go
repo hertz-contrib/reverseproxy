@@ -58,7 +58,7 @@ func (o *Options) apply(opts ...Option) {
 	}
 }
 
-// WithDialer for customizing dialer
+// WithDialer for dialer customization
 func WithDialer(dialer *websocket.Dialer) Option {
 	return func(o *Options) {
 		o.Dialer = dialer
@@ -73,7 +73,7 @@ func WithDirector(director Director) Option {
 	}
 }
 
-// WithUpgrader for customizing upgrader
+// WithUpgrader for upgrader customization
 func WithUpgrader(upgrader *hzws.HertzUpgrader) Option {
 	return func(o *Options) {
 		o.Upgrader = upgrader
