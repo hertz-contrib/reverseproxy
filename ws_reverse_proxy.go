@@ -123,10 +123,6 @@ func ConvertHZHeaderToStdHeader(hzHeader *protocol.RequestHeader) http.Header {
 	header := make(http.Header)
 	hzHeader.VisitAll(func(key, value []byte) {
 		k, v := string(key), string(value)
-		// refer to http.Request.Header
-		if k == "Host" {
-			return
-		}
 		header.Add(k, v)
 	})
 	return header

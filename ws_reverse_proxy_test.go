@@ -23,6 +23,7 @@ import (
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/app/server"
 	"github.com/cloudwego/hertz/pkg/common/hlog"
+	"github.com/cloudwego/hertz/pkg/common/test/assert"
 	"github.com/gorilla/websocket"
 	hzws "github.com/hertz-contrib/websocket"
 )
@@ -72,9 +73,7 @@ func TestProxy(t *testing.T) {
 
 			if err := upgrader.Upgrade(c, func(conn *hzws.Conn) {
 				msgType, msg, err := conn.ReadMessage()
-				if err != nil {
-					return
-				}
+				assert.Nil(t, err)
 
 				if err = conn.WriteMessage(msgType, msg); err != nil {
 					return
@@ -100,45 +99,28 @@ func TestProxy(t *testing.T) {
 	// frontend server, dial now our proxy, which will reverse proxy our
 	// message to the backend websocket server.
 	conn, resp, err := websocket.DefaultDialer.Dial(serverURL+"/proxy", h)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.Nil(t, err)
 
 	// check if the server really accepted only the first one
 	in := func(desired string) bool {
-		for _, prot := range resp.Header[http.CanonicalHeaderKey("Sec-WebSocket-Protocol")] {
-			if desired == prot {
+		for _, proto := range resp.Header[http.CanonicalHeaderKey("Sec-WebSocket-Protocol")] {
+			if desired == proto {
 				return true
 			}
 		}
 		return false
 	}
 
-	if !in("test-protocol") {
-		t.Error("test-protocol should be available")
-	}
-
-	if in("test-notsupported") {
-		t.Error("test-notsupported should be not recevied from the server.")
-	}
+	assert.True(t, in("test-protocol"))
+	assert.False(t, in("test-notsupported"))
 
 	// now write a message and send it to the backend server (which goes through proxy)
-	msg := "hello kite"
+	msg := "hello world"
 	err = conn.WriteMessage(websocket.TextMessage, []byte(msg))
-	if err != nil {
-		t.Error(err)
-	}
+	assert.Nil(t, err)
 
-	messageType, p, err := conn.ReadMessage()
-	if err != nil {
-		t.Error(err)
-	}
-
-	if messageType != websocket.TextMessage {
-		t.Error("incoming message type is not Text")
-	}
-
-	if msg != string(p) {
-		t.Errorf("expecting: %s, got: %s", msg, string(p))
-	}
+	msgType, data, err := conn.ReadMessage()
+	assert.Nil(t, err)
+	assert.DeepEqual(t, websocket.TextMessage, msgType)
+	assert.DeepEqual(t, msg, string(data))
 }
