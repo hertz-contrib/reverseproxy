@@ -58,18 +58,22 @@ func (o *Options) apply(opts ...Option) {
 	}
 }
 
+// WithDialer for customizing dialer
 func WithDialer(dialer *websocket.Dialer) Option {
 	return func(o *Options) {
 		o.Dialer = dialer
 	}
 }
 
+// WithDirector user can edit the forward header by using custom Director
+// NOTE: custom Director will overwrite default forward header field if they have the same key
 func WithDirector(director Director) Option {
 	return func(o *Options) {
 		o.Director = director
 	}
 }
 
+// WithUpgrader for customizing upgrader
 func WithUpgrader(upgrader *hzws.HertzUpgrader) Option {
 	return func(o *Options) {
 		o.Upgrader = upgrader

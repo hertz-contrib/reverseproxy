@@ -13,3 +13,43 @@
 // limitations under the License.
 
 package reverseproxy
+
+import (
+	"context"
+	"fmt"
+	"testing"
+
+	"github.com/cloudwego/hertz/pkg/app"
+	"github.com/cloudwego/hertz/pkg/common/test/assert"
+	"github.com/cloudwego/hertz/pkg/protocol"
+	"github.com/gorilla/websocket"
+	hzws "github.com/hertz-contrib/websocket"
+)
+
+func TestOptions(t *testing.T) {
+	director := func(ctx context.Context, c *app.RequestContext) *protocol.RequestHeader {
+		header := &protocol.RequestHeader{}
+		header.Add("X-Test-Head", "content")
+		return header
+	}
+	dialer := websocket.DefaultDialer
+	upgrader := &hzws.HertzUpgrader{
+		ReadBufferSize:  64,
+		WriteBufferSize: 64,
+	}
+	options := newOptions(
+		WithDirector(director),
+		WithDialer(dialer),
+		WithUpgrader(upgrader),
+	)
+	assert.DeepEqual(t, fmt.Sprintf("%p", director), fmt.Sprintf("%p", options.Director))
+	assert.DeepEqual(t, fmt.Sprintf("%p", dialer), fmt.Sprintf("%p", options.Dialer))
+	assert.DeepEqual(t, fmt.Sprintf("%p", upgrader), fmt.Sprintf("%p", options.Upgrader))
+}
+
+func TestDefaultOptions(t *testing.T) {
+	options := newOptions()
+	assert.Nil(t, options.Director)
+	assert.DeepEqual(t, DefaultOptions.Dialer, options.Dialer)
+	assert.DeepEqual(t, DefaultOptions.Upgrader, options.Upgrader)
+}

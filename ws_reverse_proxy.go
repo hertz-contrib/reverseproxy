@@ -34,6 +34,7 @@ type WSReverseProxy struct {
 	options *Options
 }
 
+// NewWSReverseProxy new a proxy which will provide handler for websocket reverse proxy
 func NewWSReverseProxy(target string, opts ...Option) *WSReverseProxy {
 	if target == "" {
 		panic("target string must not be empty")
@@ -46,6 +47,7 @@ func NewWSReverseProxy(target string, opts ...Option) *WSReverseProxy {
 	return wsrp
 }
 
+// ServeHTTP provides websocket reverse proxy service
 func (w *WSReverseProxy) ServeHTTP(ctx context.Context, c *app.RequestContext) {
 	forwardHeader := prepareForwardHeader(ctx, c)
 	// NOTE: customer Director will overwrite existed header if they have the same header key
@@ -78,6 +80,22 @@ func (w *WSReverseProxy) ServeHTTP(ctx context.Context, c *app.RequestContext) {
 
 		hlog.Debugf("upgrade handler working...")
 
+		//                       replicateWSRespConn
+		//               ┌─────────────────────────────────┐
+		//               │          errClientC             │
+		//         ┌─────▼──────┐                   ┌──────┴──────┐
+		//         │ connClient │                   │ connBackend │
+		//         └─────┬──────┘                   └──────▲──────┘
+		//               │          errBackendC            │
+		//               └─────────────────────────────────┘
+		//                       replicateWSReqConn
+		//
+		// ┌──────────┐           ┌────────────────┐             ┌──────────┐
+		// │          ├───────────► wsreverseproxy ├─────────────►  backend │
+		// │  client  │           │                │             │          │
+		// │          ◄───────────┤    (server)    ◄─────────────┤ (server) │
+		// └──────────┘           └────────────────┘             └──────────┘
+
 		go replicateWSRespConn(connClient, connBackend, errClientC)
 		go replicateWSReqConn(connBackend, connClient, errBackendC)
 
@@ -100,6 +118,7 @@ func (w *WSReverseProxy) ServeHTTP(ctx context.Context, c *app.RequestContext) {
 	}
 }
 
+// ConvertHZHeaderToStdHeader convert hertz HTTP request header to standard HTTP header
 func ConvertHZHeaderToStdHeader(hzHeader *protocol.RequestHeader) http.Header {
 	header := make(http.Header)
 	hzHeader.VisitAll(func(key, value []byte) {
