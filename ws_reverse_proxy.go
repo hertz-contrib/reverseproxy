@@ -1,3 +1,17 @@
+// Copyright 2023 CloudWeGo Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package reverseproxy
 
 import (
@@ -34,14 +48,14 @@ func NewWSReverseProxy(target string, opts ...Option) *WSReverseProxy {
 
 func (w *WSReverseProxy) ServeHTTP(ctx context.Context, c *app.RequestContext) {
 	forwardHeader := prepareForwardHeader(ctx, c)
-	// customer Director will overwrite existed header if they have the same header key
-	if w.options.director != nil {
-		appendHeader := w.options.director(ctx, c)
+	// NOTE: customer Director will overwrite existed header if they have the same header key
+	if w.options.Director != nil {
+		appendHeader := w.options.Director(ctx, c)
 		appendHeader.VisitAll(func(key, value []byte) {
 			forwardHeader.SetBytesKV(key, value)
 		})
 	}
-	connBackend, respBackend, err := w.options.dialer.Dial(w.target, ConvertHZHeaderToStdHeader(forwardHeader))
+	connBackend, respBackend, err := w.options.Dialer.Dial(w.target, ConvertHZHeaderToStdHeader(forwardHeader))
 	if err != nil {
 		hlog.Errorf("can not dial to remote backend(%v): %v", w.target, err)
 		if respBackend != nil {
@@ -53,7 +67,7 @@ func (w *WSReverseProxy) ServeHTTP(ctx context.Context, c *app.RequestContext) {
 		}
 		return
 	}
-	if err := w.options.upgrader.Upgrade(c, func(connClient *hzws.Conn) {
+	if err := w.options.Upgrader.Upgrade(c, func(connClient *hzws.Conn) {
 		defer connClient.Close()
 
 		var (
@@ -64,8 +78,8 @@ func (w *WSReverseProxy) ServeHTTP(ctx context.Context, c *app.RequestContext) {
 
 		hlog.Debugf("upgrade handler working...")
 
-		go replicateWSConn(connClient, connBackend, errClientC, false)
-		go replicateWSConn(connClient, connBackend, errBackendC, true)
+		go replicateWSRespConn(connClient, connBackend, errClientC)
+		go replicateWSReqConn(connBackend, connClient, errBackendC)
 
 		for {
 			select {
@@ -127,64 +141,60 @@ func prepareForwardHeader(_ context.Context, c *app.RequestContext) *protocol.Re
 	return forwardHeader
 }
 
-func replicateWSConn(connClient *hzws.Conn, connBackend *websocket.Conn, errC chan error, c2b bool) {
-	if c2b {
-		src := connClient
-		dst := connBackend
-		for {
-			msgType, msg, err := src.ReadMessage()
-			if err != nil {
-				hlog.Errorf("read message failed when replicating websocket conn: msgType=%v msg=%v err=%v", msgType, msg, err)
-				var ce *hzws.CloseError
-				if errors.As(err, &ce) {
-					msg = hzws.FormatCloseMessage(ce.Code, ce.Text)
-				} else {
-					hlog.Errorf("read message failed when replicate websocket conn: err=%v", err)
-					msg = hzws.FormatCloseMessage(hzws.CloseAbnormalClosure, err.Error())
-				}
-				errC <- err
-
-				if err = dst.WriteMessage(websocket.CloseMessage, msg); err != nil {
-					hlog.Errorf("write message failed when replicate websocket conn: err=%v", err)
-				}
-				break
+func replicateWSReqConn(dst *websocket.Conn, src *hzws.Conn, errC chan error) {
+	for {
+		msgType, msg, err := src.ReadMessage()
+		if err != nil {
+			hlog.Errorf("read message failed when replicating websocket conn: msgType=%v msg=%v err=%v", msgType, msg, err)
+			var ce *hzws.CloseError
+			if errors.As(err, &ce) {
+				msg = hzws.FormatCloseMessage(ce.Code, ce.Text)
+			} else {
+				hlog.Errorf("read message failed when replicate websocket conn: err=%v", err)
+				msg = hzws.FormatCloseMessage(hzws.CloseAbnormalClosure, err.Error())
 			}
+			errC <- err
 
-			err = dst.WriteMessage(msgType, msg)
-			if err != nil {
-				hlog.Errorf("write message failed when replicating websocket conn: msgType=%v msg=%v err=%v", msgType, msg, err)
-				errC <- err
-				break
+			if err = dst.WriteMessage(websocket.CloseMessage, msg); err != nil {
+				hlog.Errorf("write message failed when replicate websocket conn: err=%v", err)
 			}
+			break
 		}
-	} else {
-		src := connBackend
-		dst := connClient
-		for {
-			msgType, msg, err := src.ReadMessage()
-			if err != nil {
-				hlog.Errorf("read message failed when replicating websocket conn: msgType=%v msg=%v err=%v", msgType, msg, err)
-				var ce *websocket.CloseError
-				if errors.As(err, &ce) {
-					msg = websocket.FormatCloseMessage(ce.Code, ce.Text)
-				} else {
-					hlog.Errorf("read message failed when replicate websocket conn: err=%v", err)
-					msg = websocket.FormatCloseMessage(websocket.CloseAbnormalClosure, err.Error())
-				}
-				errC <- err
 
-				if err = dst.WriteMessage(hzws.CloseMessage, msg); err != nil {
-					hlog.Errorf("write message failed when replicate websocket conn: err=%v", err)
-				}
-				break
-			}
+		err = dst.WriteMessage(msgType, msg)
+		if err != nil {
+			hlog.Errorf("write message failed when replicating websocket conn: msgType=%v msg=%v err=%v", msgType, msg, err)
+			errC <- err
+			break
+		}
+	}
+}
 
-			err = dst.WriteMessage(msgType, msg)
-			if err != nil {
-				hlog.Errorf("write message failed when replicating websocket conn: msgType=%v msg=%v err=%v", msgType, msg, err)
-				errC <- err
-				break
+func replicateWSRespConn(dst *hzws.Conn, src *websocket.Conn, errC chan error) {
+	for {
+		msgType, msg, err := src.ReadMessage()
+		if err != nil {
+			hlog.Errorf("read message failed when replicating websocket conn: msgType=%v msg=%v err=%v", msgType, msg, err)
+			var ce *websocket.CloseError
+			if errors.As(err, &ce) {
+				msg = websocket.FormatCloseMessage(ce.Code, ce.Text)
+			} else {
+				hlog.Errorf("read message failed when replicate websocket conn: err=%v", err)
+				msg = websocket.FormatCloseMessage(websocket.CloseAbnormalClosure, err.Error())
 			}
+			errC <- err
+
+			if err = dst.WriteMessage(hzws.CloseMessage, msg); err != nil {
+				hlog.Errorf("write message failed when replicate websocket conn: err=%v", err)
+			}
+			break
+		}
+
+		err = dst.WriteMessage(msgType, msg)
+		if err != nil {
+			hlog.Errorf("write message failed when replicating websocket conn: msgType=%v msg=%v err=%v", msgType, msg, err)
+			errC <- err
+			break
 		}
 	}
 }
