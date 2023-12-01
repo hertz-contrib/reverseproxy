@@ -35,7 +35,7 @@ func BenchmarkNewWSReverseProxy(b *testing.B) {
 }
 
 var (
-	serverURL  = "ws://127.0.0.1:7777"
+	proxyURL   = "ws://127.0.0.1:7777"
 	backendURL = "ws://127.0.0.1:8888"
 )
 
@@ -88,19 +88,18 @@ func TestProxy(t *testing.T) {
 
 	time.Sleep(time.Millisecond * 100)
 
-	// let us define two subprotocols, only one is supported by the server
+	// only one is supported by the server
 	clientSubProtocols := []string{"test-protocol", "test-notsupported"}
 	h := http.Header{}
 	for _, subproto := range clientSubProtocols {
 		h.Add("Sec-WebSocket-Protocol", subproto)
 	}
 
-	// frontend server, dial now our proxy, which will reverse proxy our
-	// message to the backend websocket server.
-	conn, resp, err := websocket.DefaultDialer.Dial(serverURL+"/proxy", h)
+	// client
+	conn, resp, err := websocket.DefaultDialer.Dial(proxyURL+"/proxy", h)
 	assert.Nil(t, err)
 
-	// check if the server really accepted only the first one
+	// check if the server really accepted the correct protocol
 	in := func(desired string) bool {
 		for _, proto := range resp.Header[http.CanonicalHeaderKey("Sec-WebSocket-Protocol")] {
 			if desired == proto {
@@ -113,7 +112,7 @@ func TestProxy(t *testing.T) {
 	assert.True(t, in("test-protocol"))
 	assert.False(t, in("test-notsupported"))
 
-	// now write a message and send it to the backend server (which goes through proxy)
+	// now write a message and send it to the proxy
 	msg := "hello world"
 	err = conn.WriteMessage(websocket.TextMessage, []byte(msg))
 	assert.Nil(t, err)
