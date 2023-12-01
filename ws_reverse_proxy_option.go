@@ -16,14 +16,14 @@ package reverseproxy
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/cloudwego/hertz/pkg/protocol"
 	"github.com/gorilla/websocket"
 	hzws "github.com/hertz-contrib/websocket"
 )
 
-type Director func(ctx context.Context, c *app.RequestContext) *protocol.RequestHeader
+type Director func(ctx context.Context, c *app.RequestContext, forwardHeader http.Header)
 
 type Option func(o *Options)
 

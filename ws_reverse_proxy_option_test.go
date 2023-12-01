@@ -17,20 +17,18 @@ package reverseproxy
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"testing"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/test/assert"
-	"github.com/cloudwego/hertz/pkg/protocol"
 	"github.com/gorilla/websocket"
 	hzws "github.com/hertz-contrib/websocket"
 )
 
 func TestOptions(t *testing.T) {
-	director := func(ctx context.Context, c *app.RequestContext) *protocol.RequestHeader {
-		header := &protocol.RequestHeader{}
-		header.Add("X-Test-Head", "content")
-		return header
+	director := func(ctx context.Context, c *app.RequestContext, forwardHeader http.Header) {
+		forwardHeader.Add("X-Test-Head", "content")
 	}
 	dialer := websocket.DefaultDialer
 	upgrader := &hzws.HertzUpgrader{
