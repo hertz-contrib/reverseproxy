@@ -2,6 +2,12 @@
 
 `reserve proxy` extension for Hertz
 
+## Install
+
+```shell
+go get github.com/hertz-contrib/reverseproxy
+```
+
 ## Quick Start
 
 ```go
@@ -87,6 +93,8 @@ func main() {
 `ReverseProxy` provides `SetDirector`、`SetModifyResponse`、`SetErrorHandler` to modify `Request` and `Response`.
 
 ### Websocket Reverse Proxy
+
+Websocket reverse proxy for Hertz, inspired by [fasthttp-reverse-proxy](https://github.com/yeqown/fasthttp-reverse-proxy)
 
 ```go
 package main
