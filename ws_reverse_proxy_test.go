@@ -82,7 +82,6 @@ func TestProxy(t *testing.T) {
 				hlog.Errorf("upgrade error: %v", err)
 				return
 			}
-
 		})
 		bs.Spin()
 	}()
