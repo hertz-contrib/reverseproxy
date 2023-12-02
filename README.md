@@ -2,6 +2,12 @@
 
 `reserve proxy` extension for Hertz
 
+## Install
+
+```shell
+go get github.com/hertz-contrib/reverseproxy
+```
+
 ## Quick Start
 
 ```go
@@ -85,6 +91,31 @@ func main() {
 ### Request/Response
 
 `ReverseProxy` provides `SetDirector`、`SetModifyResponse`、`SetErrorHandler` to modify `Request` and `Response`.
+
+### Websocket Reverse Proxy
+
+Websocket reverse proxy for Hertz, inspired by [fasthttp-reverse-proxy](https://github.com/yeqown/fasthttp-reverse-proxy)
+
+```go
+package main
+
+import (
+	"github.com/cloudwego/hertz/pkg/app/server"
+	"github.com/hertz-contrib/reverseproxy"
+)
+
+func main() {
+	h := server.Default()
+	h.GET("/backend", reverseproxy.NewWSReverseProxy("ws://example.com").ServeHTTP)
+	h.Spin()
+}
+```
+
+| Configuration  | Default                   | Description                  |
+|----------------|---------------------------|------------------------------|
+| `WithDirector` | `nil`                     | customize the forward header |
+| `WithDialer`   | `gorillaws.DefaultDialer` | for dialer customization     |
+| `WithUpgrader` | `hzws.HertzUpgrader`      | for upgrader customization   |
 
 ### More info
 See [example](https://github.com/cloudwego/hertz-examples)
