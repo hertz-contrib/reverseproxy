@@ -46,6 +46,8 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/bytedance/gopkg/util/gopool"
+
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/cloudwego/hertz/pkg/protocol"
@@ -118,8 +120,12 @@ func (w *WSReverseProxy) ServeHTTP(ctx context.Context, c *app.RequestContext) {
 		// │          ◄───────────┤    (server)    ◄─────────────┤ (server) │
 		// └──────────┘           └────────────────┘             └──────────┘
 
-		go replicateWSRespConn(ctx, connClient, connBackend, errClientC)
-		go replicateWSReqConn(ctx, connBackend, connClient, errBackendC)
+		gopool.CtxGo(ctx, func() {
+			replicateWSRespConn(ctx, connClient, connBackend, errClientC)
+		})
+		gopool.CtxGo(ctx, func() {
+			replicateWSReqConn(ctx, connBackend, connClient, errBackendC)
+		})
 
 		for {
 			select {
