@@ -140,31 +140,19 @@ func (w *WSReverseProxy) ServeHTTP(ctx context.Context, c *app.RequestContext) {
 	}
 }
 
-// ConvertHZHeaderToStdHeader convert hertz HTTP request header to standard HTTP header
-func ConvertHZHeaderToStdHeader(hzHeader *protocol.RequestHeader) http.Header {
-	header := make(http.Header)
-	hzHeader.VisitAll(func(key, value []byte) {
-		k, v := string(key), string(value)
-		header.Add(k, v)
-	})
-	return header
-}
-
 func prepareForwardHeader(_ context.Context, c *app.RequestContext) http.Header {
-	forwardHeader := new(protocol.RequestHeader)
-	if origin := c.Request.Header.Peek("Origin"); origin != nil {
-		forwardHeader.SetBytesKV([]byte("Origin"), origin)
+	forwardHeader := make(http.Header, 4)
+	if origin := string(c.Request.Header.Peek("Origin")); origin != "" {
+		forwardHeader.Add("Origin", origin)
 	}
-	if proto := c.Request.Header.Peek("Sec-Websocket-Protocol"); proto != nil {
-		forwardHeader.SetBytesKV([]byte("Sec-Websocket-Protocol"), proto)
+	if proto := string(c.Request.Header.Peek("Sec-Websocket-Protocol")); proto != "" {
+		forwardHeader.Add("Sec-WebSocket-Protocol", proto)
 	}
-	if cookies := c.Request.Header.Cookies(); cookies != nil {
-		for _, cookie := range cookies {
-			forwardHeader.SetCookie(string(cookie.Key()), string(cookie.Value()))
-		}
+	if cookie := string(c.Request.Header.Peek("Cookie")); cookie != "" {
+		forwardHeader.Add("Cookie", cookie)
 	}
-	if host := c.Request.Host(); host != nil {
-		forwardHeader.SetHost(string(host))
+	if host := string(c.Request.Host()); host != "" {
+		forwardHeader.Set("Host", host)
 	}
 	clientIP := c.ClientIP()
 	if prior := c.Request.Header.Peek("X-Forwarded-For"); prior != nil {
@@ -175,7 +163,7 @@ func prepareForwardHeader(_ context.Context, c *app.RequestContext) http.Header 
 	if string(c.Request.URI().Scheme()) == "https" {
 		forwardHeader.Set("X-Forwarded-Proto", "https")
 	}
-	return ConvertHZHeaderToStdHeader(forwardHeader)
+	return forwardHeader
 }
 
 func replicateWSReqConn(ctx context.Context, dst *websocket.Conn, src *hzws.Conn, errC chan error) {
