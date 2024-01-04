@@ -55,6 +55,7 @@ func TestProxy(t *testing.T) {
 
 	// proxy server
 	ps := server.Default(server.WithHostPorts(":7777"))
+	ps.NoHijackConnPool = true
 	ps.GET("/proxy", proxy.ServeHTTP)
 	go ps.Spin()
 
@@ -63,6 +64,7 @@ func TestProxy(t *testing.T) {
 	go func() {
 		// backend server
 		bs := server.Default()
+		bs.NoHijackConnPool = true
 		bs.GET("/", func(ctx context.Context, c *app.RequestContext) {
 			// Don't upgrade if original host header isn't preserved
 			host := string(c.Host())
