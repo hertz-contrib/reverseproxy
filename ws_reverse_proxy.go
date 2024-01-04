@@ -137,9 +137,12 @@ func (w *WSReverseProxy) ServeHTTP(ctx context.Context, c *app.RequestContext) {
 
 			var ce *websocket.CloseError
 			var hzce *hzws.CloseError
-			if !errors.As(err, &ce) || !errors.As(err, &hzce) {
+			if !errors.As(err, &ce) && !errors.As(err, &hzce) {
 				hlog.CtxErrorf(ctx, errMsg, err)
+				continue
 			}
+
+			break
 		}
 	}); err != nil {
 		hlog.CtxErrorf(ctx, "can not upgrade to websocket: %v", err)
