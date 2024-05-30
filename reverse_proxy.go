@@ -279,7 +279,7 @@ func (r *ReverseProxy) ServeHTTP(c context.Context, ctx *app.RequestContext) {
 	if r.client != nil {
 		fn = r.client.DoRedirects
 	}
-	err := fn(c, req, resp, 2)
+	err := fn(c, req, resp, 3)
 	if err != nil {
 		hlog.CtxErrorf(c, "HERTZ: Client request error: %#v", err.Error())
 		r.getErrorHandler()(ctx, err)
