@@ -32,6 +32,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/cloudwego/hertz/pkg/app"
@@ -44,6 +45,8 @@ import (
 
 type ReverseProxy struct {
 	client *client.Client
+
+	clientBehavior clientBehavior
 
 	// target is set as a reverse proxy address
 	Target string
@@ -275,11 +278,8 @@ func (r *ReverseProxy) ServeHTTP(c context.Context, ctx *app.RequestContext) {
 			req.Header.Add("X-Forwarded-For", ip)
 		}
 	}
-	fn := client.DoRedirects
-	if r.client != nil {
-		fn = r.client.DoRedirects
-	}
-	err := fn(c, req, resp, 3)
+
+	err := r.doClientBehavior(c, req, resp)
 	if err != nil {
 		hlog.CtxErrorf(c, "HERTZ: Client request error: %#v", err.Error())
 		r.getErrorHandler()(ctx, err)
@@ -345,11 +345,41 @@ func (r *ReverseProxy) SetSaveOriginResHeader(b bool) {
 	r.saveOriginResHeader = b
 }
 
+func (r *ReverseProxy) SetClientBehavior(cb clientBehavior) {
+	r.clientBehavior = cb
+}
+
 func (r *ReverseProxy) getErrorHandler() func(c *app.RequestContext, err error) {
 	if r.errorHandler != nil {
 		return r.errorHandler
 	}
 	return r.defaultErrorHandler
+}
+
+func (r *ReverseProxy) doClientBehavior(ctx context.Context, req *protocol.Request, resp *protocol.Response) error {
+	var err error
+	switch r.clientBehavior.clientBehaviorType {
+	case do:
+		err = r.client.Do(ctx, req, resp)
+	case doDeadline:
+		deadline := r.clientBehavior.param.(time.Time)
+		err = r.client.DoDeadline(ctx, req, resp, deadline)
+	case doRedirects:
+		maxRedirectsCount := r.clientBehavior.param.(int)
+		err = r.client.DoRedirects(ctx, req, resp, maxRedirectsCount)
+	case doTimeout:
+		timeout := r.clientBehavior.param.(time.Time)
+		err = r.client.DoDeadline(ctx, req, resp, timeout)
+	}
+	return err
+}
+
+func (r *ReverseProxy) do(ctx context.Context, req *protocol.Request, resp *protocol.Response) error {
+	if r.client != nil {
+		return r.client.Do(ctx, req, resp)
+	} else {
+		return client.Do(ctx, req, resp)
+	}
 }
 
 // b2s converts byte slice to a string without memory allocation.
