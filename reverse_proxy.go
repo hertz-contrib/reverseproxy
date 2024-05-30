@@ -275,11 +275,11 @@ func (r *ReverseProxy) ServeHTTP(c context.Context, ctx *app.RequestContext) {
 			req.Header.Add("X-Forwarded-For", ip)
 		}
 	}
-	fn := client.DoRedirects(c, &ctx.Request, &ctx.Response, 1)
+	fn := client.DoRedirects
 	if r.client != nil {
-		fn = r.client.DoRedirects(c, &ctx.Request, &ctx.Response, 1)
+		fn = r.client.DoRedirects
 	}
-	err := fn(c, req, resp)
+	err := fn(c, req, resp, 1)
 	if err != nil {
 		hlog.CtxErrorf(c, "HERTZ: Client request error: %#v", err.Error())
 		r.getErrorHandler()(ctx, err)
