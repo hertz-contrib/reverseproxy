@@ -275,9 +275,9 @@ func (r *ReverseProxy) ServeHTTP(c context.Context, ctx *app.RequestContext) {
 			req.Header.Add("X-Forwarded-For", ip)
 		}
 	}
-	fn := client.Do
+	fn := client.DoRedirects(c, &ctx.Request, &ctx.Response, 1)
 	if r.client != nil {
-		fn = r.client.Do
+		fn = r.client.DoRedirects(c, &ctx.Request, &ctx.Response, 1)
 	}
 	err := fn(c, req, resp)
 	if err != nil {
