@@ -359,8 +359,6 @@ func (r *ReverseProxy) getErrorHandler() func(c *app.RequestContext, err error) 
 func (r *ReverseProxy) doClientBehavior(ctx context.Context, req *protocol.Request, resp *protocol.Response) error {
 	var err error
 	switch r.clientBehavior.clientBehaviorType {
-	case do:
-		err = r.client.Do(ctx, req, resp)
 	case doDeadline:
 		deadline := r.clientBehavior.param.(time.Time)
 		err = r.client.DoDeadline(ctx, req, resp, deadline)
@@ -370,6 +368,8 @@ func (r *ReverseProxy) doClientBehavior(ctx context.Context, req *protocol.Reque
 	case doTimeout:
 		timeout := r.clientBehavior.param.(time.Time)
 		err = r.client.DoDeadline(ctx, req, resp, timeout)
+	default:
+		err = r.client.Do(ctx, req, resp)
 	}
 	return err
 }

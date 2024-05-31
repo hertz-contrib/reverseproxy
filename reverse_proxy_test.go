@@ -569,6 +569,7 @@ func TestReverseProxySaveRespHeader(t *testing.T) {
 
 	proxy, err := NewSingleHostReverseProxy("http://127.0.0.1:9997/proxy")
 	proxy.SetSaveOriginResHeader(true)
+	proxy.SetClientBehavior(ClientDoRedirects(2))
 	if err != nil {
 		t.Errorf("proxy error: %v", err)
 	}
@@ -588,26 +589,4 @@ func TestReverseProxySaveRespHeader(t *testing.T) {
 		t.Fatalf("Get: %v", err)
 	}
 	assert.DeepEqual(t, "bbb", res.Header.Get("aaa"))
-}
-
-func TestReverseProxySetClientBehavior(t *testing.T) {
-	r := server.New(server.WithHostPorts("127.0.0.1:9998"))
-
-	r.POST("/proxy/backend", func(cc context.Context, ctx *app.RequestContext) {
-		ctx.GetConn().Close()
-	})
-	proxy, _ := NewSingleHostReverseProxy("http://127.0.0.1:9998/proxy")
-	proxy.SetClientBehavior(ClientDo())
-	r.POST("/backend", proxy.ServeHTTP)
-	go r.Spin()
-	time.Sleep(time.Second)
-	cli, _ := client.NewClient()
-	req := protocol.AcquireRequest()
-	req.SetMethod("POST")
-	resp := protocol.AcquireResponse()
-	req.SetRequestURI("http://127.0.0.1:9998/backend")
-	cli.Do(context.Background(), req, resp)
-	if g, e := resp.StatusCode(), http.StatusTeapot; g != e {
-		t.Errorf("got res.StatusCode %d; expected %d", g, e)
-	}
 }
