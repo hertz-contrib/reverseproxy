@@ -119,13 +119,11 @@ func NewSingleHostReverseProxy(target string, options ...config.ClientOption) (*
 			req.Header.SetHostBytes(req.URI().Host())
 		},
 	}
-	if len(options) != 0 {
-		c, err := client.NewClient(options...)
-		if err != nil {
-			return nil, err
-		}
-		r.client = c
+	c, err := client.NewClient(options...)
+	if err != nil {
+		return nil, err
 	}
+	r.client = c
 	return r, nil
 }
 
@@ -366,20 +364,12 @@ func (r *ReverseProxy) doClientBehavior(ctx context.Context, req *protocol.Reque
 		maxRedirectsCount := r.clientBehavior.param.(int)
 		err = r.client.DoRedirects(ctx, req, resp, maxRedirectsCount)
 	case doTimeout:
-		timeout := r.clientBehavior.param.(time.Time)
-		err = r.client.DoDeadline(ctx, req, resp, timeout)
+		timeout := r.clientBehavior.param.(time.Duration)
+		err = r.client.DoTimeout(ctx, req, resp, timeout)
 	default:
 		err = r.client.Do(ctx, req, resp)
 	}
 	return err
-}
-
-func (r *ReverseProxy) do(ctx context.Context, req *protocol.Request, resp *protocol.Response) error {
-	if r.client != nil {
-		return r.client.Do(ctx, req, resp)
-	} else {
-		return client.Do(ctx, req, resp)
-	}
 }
 
 // b2s converts byte slice to a string without memory allocation.

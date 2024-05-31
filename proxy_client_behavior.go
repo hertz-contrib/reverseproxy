@@ -36,7 +36,7 @@ func ClientDoDeadline(param time.Time) clientBehavior {
 	}
 }
 
-func ClientDoTimeout(param time.Time) clientBehavior {
+func ClientDoTimeout(param time.Duration) clientBehavior {
 	return clientBehavior{
 		clientBehaviorType: doTimeout,
 		param:              param,
