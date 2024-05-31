@@ -1,4 +1,4 @@
-module github.com/dragonYang200/reverseproxy
+module github.com/hertz-contrib/reverseproxy
 
 go 1.16
 
