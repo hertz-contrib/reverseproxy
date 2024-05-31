@@ -108,7 +108,6 @@ var hopHeaders = []string{
 // To rewrite Host headers, use ReverseProxy directly with a custom
 // director policy.
 //
-// Note: if no config.ClientOption is passed it will use the default global client.Client instance.
 // When passing config.ClientOption it will initialize a local client.Client instance.
 // Using ReverseProxy.SetClient if there is need for shared customized client.Client instance.
 func NewSingleHostReverseProxy(target string, options ...config.ClientOption) (*ReverseProxy, error) {
