@@ -569,6 +569,7 @@ func TestReverseProxySaveRespHeader(t *testing.T) {
 
 	proxy, err := NewSingleHostReverseProxy("http://127.0.0.1:9997/proxy")
 	proxy.SetSaveOriginResHeader(true)
+	proxy.SetClientBehavior(ClientDoRedirects(2))
 	if err != nil {
 		t.Errorf("proxy error: %v", err)
 	}

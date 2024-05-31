@@ -32,6 +32,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/cloudwego/hertz/pkg/app"
@@ -44,6 +45,8 @@ import (
 
 type ReverseProxy struct {
 	client *client.Client
+
+	clientBehavior clientBehavior
 
 	// target is set as a reverse proxy address
 	Target string
@@ -105,7 +108,6 @@ var hopHeaders = []string{
 // To rewrite Host headers, use ReverseProxy directly with a custom
 // director policy.
 //
-// Note: if no config.ClientOption is passed it will use the default global client.Client instance.
 // When passing config.ClientOption it will initialize a local client.Client instance.
 // Using ReverseProxy.SetClient if there is need for shared customized client.Client instance.
 func NewSingleHostReverseProxy(target string, options ...config.ClientOption) (*ReverseProxy, error) {
@@ -116,13 +118,11 @@ func NewSingleHostReverseProxy(target string, options ...config.ClientOption) (*
 			req.Header.SetHostBytes(req.URI().Host())
 		},
 	}
-	if len(options) != 0 {
-		c, err := client.NewClient(options...)
-		if err != nil {
-			return nil, err
-		}
-		r.client = c
+	c, err := client.NewClient(options...)
+	if err != nil {
+		return nil, err
 	}
+	r.client = c
 	return r, nil
 }
 
@@ -275,11 +275,8 @@ func (r *ReverseProxy) ServeHTTP(c context.Context, ctx *app.RequestContext) {
 			req.Header.Add("X-Forwarded-For", ip)
 		}
 	}
-	fn := client.Do
-	if r.client != nil {
-		fn = r.client.Do
-	}
-	err := fn(c, req, resp)
+
+	err := r.doClientBehavior(c, req, resp)
 	if err != nil {
 		hlog.CtxErrorf(c, "HERTZ: Client request error: %#v", err.Error())
 		r.getErrorHandler()(ctx, err)
@@ -345,11 +342,33 @@ func (r *ReverseProxy) SetSaveOriginResHeader(b bool) {
 	r.saveOriginResHeader = b
 }
 
+func (r *ReverseProxy) SetClientBehavior(cb clientBehavior) {
+	r.clientBehavior = cb
+}
+
 func (r *ReverseProxy) getErrorHandler() func(c *app.RequestContext, err error) {
 	if r.errorHandler != nil {
 		return r.errorHandler
 	}
 	return r.defaultErrorHandler
+}
+
+func (r *ReverseProxy) doClientBehavior(ctx context.Context, req *protocol.Request, resp *protocol.Response) error {
+	var err error
+	switch r.clientBehavior.clientBehaviorType {
+	case doDeadline:
+		deadline := r.clientBehavior.param.(time.Time)
+		err = r.client.DoDeadline(ctx, req, resp, deadline)
+	case doRedirects:
+		maxRedirectsCount := r.clientBehavior.param.(int)
+		err = r.client.DoRedirects(ctx, req, resp, maxRedirectsCount)
+	case doTimeout:
+		timeout := r.clientBehavior.param.(time.Duration)
+		err = r.client.DoTimeout(ctx, req, resp, timeout)
+	default:
+		err = r.client.Do(ctx, req, resp)
+	}
+	return err
 }
 
 // b2s converts byte slice to a string without memory allocation.
