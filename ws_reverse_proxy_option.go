@@ -83,7 +83,7 @@ func WithUpgrader(upgrader *hzws.HertzUpgrader) Option {
 }
 
 // WithDynamicRoute enable dynamic route
-// backend url = handler url + proxy url
+// proxy url = handler url + target url
 func WithDynamicRoute() Option {
 	return func(o *Options) {
 		o.DynamicRoute = true
