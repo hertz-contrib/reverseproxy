@@ -125,9 +125,7 @@ func TestProxy(t *testing.T) {
 	assert.DeepEqual(t, msg, string(data))
 }
 
-var (
-	dynamicBackendURL = "ws://127.0.0.1:8888/api"
-)
+var dynamicBackendURL = "ws://127.0.0.1:8888/api"
 
 func TestProxyWithDynamicRoute(t *testing.T) {
 	// websocket proxy
