@@ -47,7 +47,6 @@ import (
 	"net/http"
 
 	"github.com/bytedance/gopkg/util/gopool"
-
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/cloudwego/hertz/pkg/protocol"
@@ -81,9 +80,13 @@ func (w *WSReverseProxy) ServeHTTP(ctx context.Context, c *app.RequestContext) {
 	if w.options.Director != nil {
 		w.options.Director(ctx, c, forwardHeader)
 	}
-	connBackend, respBackend, err := w.options.Dialer.Dial(w.target, forwardHeader)
+	target := w.target
+	if w.options.DynamicRoute {
+		target = w.target + b2s(c.Path())
+	}
+	connBackend, respBackend, err := w.options.Dialer.Dial(target, forwardHeader)
 	if err != nil {
-		hlog.CtxErrorf(ctx, "can not dial to remote backend(%v): %v", w.target, err)
+		hlog.CtxErrorf(ctx, "can not dial to remote backend(%v): %v", target, err)
 		if respBackend != nil {
 			if err = wsCopyResponse(&c.Response, respBackend); err != nil {
 				hlog.CtxErrorf(ctx, "can not copy response: %v", err)
