@@ -125,7 +125,7 @@ func TestProxy(t *testing.T) {
 	assert.DeepEqual(t, msg, string(data))
 }
 
-var dynamicBackendURL = "ws://127.0.0.1:8888/api"
+var dynamicBackendURL = "ws://127.0.0.1:9001/api"
 
 func TestProxyWithDynamicRoute(t *testing.T) {
 	// websocket proxy
@@ -143,23 +143,23 @@ func TestProxyWithDynamicRoute(t *testing.T) {
 	proxy := NewWSReverseProxy(dynamicBackendURL, WithUpgrader(upgrader), WithDynamicRoute())
 
 	// proxy server
-	ps := server.Default(server.WithHostPorts(":7777"))
+	ps := server.Default(server.WithHostPorts(":9000"))
 	ps.NoHijackConnPool = true
 	ps.GET("/test", proxy.ServeHTTP)
 	ps.GET("/test2", proxy.ServeHTTP)
 	go ps.Spin()
 
-	time.Sleep(time.Millisecond * 100)
+	time.Sleep(time.Second * 1)
 
 	go func() {
 		// backend server
-		bs := server.Default()
+		bs := server.Default(server.WithHostPorts(":9001"))
 		bs.NoHijackConnPool = true
 		bs.GET("/api/test", func(ctx context.Context, c *app.RequestContext) {
 			// Don't upgrade if original host header isn't preserved
 			host := string(c.Host())
-			if host != "127.0.0.1:7777" {
-				hlog.Errorf("Host header set incorrectly.  Expecting 127.0.0.1:7777 got %s", host)
+			if host != "127.0.0.1:9000" {
+				hlog.Errorf("Host header set incorrectly.  Expecting 127.0.0.1:9000 got %s", host)
 				return
 			}
 
@@ -178,8 +178,8 @@ func TestProxyWithDynamicRoute(t *testing.T) {
 		bs.GET("/api/test2", func(ctx context.Context, c *app.RequestContext) {
 			// Don't upgrade if original host header isn't preserved
 			host := string(c.Host())
-			if host != "127.0.0.1:7777" {
-				hlog.Errorf("Host header set incorrectly.  Expecting 127.0.0.1:7777 got %s", host)
+			if host != "127.0.0.1:9000" {
+				hlog.Errorf("Host header set incorrectly.  Expecting 127.0.0.1:9000 got %s", host)
 				return
 			}
 
@@ -198,7 +198,7 @@ func TestProxyWithDynamicRoute(t *testing.T) {
 		bs.Spin()
 	}()
 
-	time.Sleep(time.Millisecond * 100)
+	time.Sleep(time.Second * 1)
 
 	// only one is supported by the server
 	clientSubProtocols := []string{"test-protocol", "test-notsupported"}
@@ -208,9 +208,9 @@ func TestProxyWithDynamicRoute(t *testing.T) {
 	}
 
 	// client
-	conn, resp, err := websocket.DefaultDialer.Dial("ws://127.0.0.1:7777/test", h)
+	conn, resp, err := websocket.DefaultDialer.Dial("ws://127.0.0.1:9000/test", h)
 	assert.Nil(t, err)
-	conn2, resp2, err := websocket.DefaultDialer.Dial("ws://127.0.0.1:7777/test2", h)
+	conn2, resp2, err := websocket.DefaultDialer.Dial("ws://127.0.0.1:9000/test2", h)
 	assert.Nil(t, err)
 
 	// check if the server really accepted the correct protocol
