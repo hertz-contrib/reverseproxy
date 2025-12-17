@@ -36,15 +36,16 @@ import (
 	"unsafe"
 
 	"github.com/cloudwego/hertz/pkg/app"
-	"github.com/cloudwego/hertz/pkg/app/client"
+	hzclient "github.com/cloudwego/hertz/pkg/app/client"
 	"github.com/cloudwego/hertz/pkg/common/config"
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/cloudwego/hertz/pkg/protocol"
+	"github.com/cloudwego/hertz/pkg/protocol/client"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 )
 
 type ReverseProxy struct {
-	client *client.Client
+	client client.Doer
 
 	clientBehavior clientBehavior
 
@@ -118,7 +119,7 @@ func NewSingleHostReverseProxy(target string, options ...config.ClientOption) (*
 			req.Header.SetHostBytes(req.URI().Host())
 		},
 	}
-	c, err := client.NewClient(options...)
+	c, err := hzclient.NewClient(options...)
 	if err != nil {
 		return nil, err
 	}
@@ -129,8 +130,11 @@ func NewSingleHostReverseProxy(target string, options ...config.ClientOption) (*
 func JoinURLPath(req *protocol.Request, target string) (path []byte) {
 	aslash := req.URI().Path()[0] == '/'
 	var bslash bool
-	if strings.HasPrefix(target, "http") {
-		// absolute path
+
+	isAbsolute := strings.Contains(target, "://")
+
+	if isAbsolute {
+		// absolute path (http, https, sd, etc.)
 		bslash = strings.HasSuffix(target, "/")
 	} else {
 		// default redirect to local
@@ -320,7 +324,7 @@ func (r *ReverseProxy) SetDirector(director func(req *protocol.Request)) {
 }
 
 // SetClient use to customize client
-func (r *ReverseProxy) SetClient(client *client.Client) {
+func (r *ReverseProxy) SetClient(client client.Doer) {
 	r.client = client
 }
 
@@ -358,13 +362,13 @@ func (r *ReverseProxy) doClientBehavior(ctx context.Context, req *protocol.Reque
 	switch r.clientBehavior.clientBehaviorType {
 	case doDeadline:
 		deadline := r.clientBehavior.param.(time.Time)
-		err = r.client.DoDeadline(ctx, req, resp, deadline)
+		err = client.DoDeadline(ctx, req, resp, deadline, r.client)
 	case doRedirects:
 		maxRedirectsCount := r.clientBehavior.param.(int)
-		err = r.client.DoRedirects(ctx, req, resp, maxRedirectsCount)
+		_, _, err = client.DoRequestFollowRedirects(ctx, req, resp, req.URI().String(), maxRedirectsCount, r.client)
 	case doTimeout:
 		timeout := r.clientBehavior.param.(time.Duration)
-		err = r.client.DoTimeout(ctx, req, resp, timeout)
+		err = client.DoTimeout(ctx, req, resp, timeout, r.client)
 	default:
 		err = r.client.Do(ctx, req, resp)
 	}
