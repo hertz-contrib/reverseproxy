@@ -111,11 +111,12 @@ func main() {
 }
 ```
 
-| Configuration  | Default                   | Description                  |
-|----------------|---------------------------|------------------------------|
-| `WithDirector` | `nil`                     | customize the forward header |
-| `WithDialer`   | `gorillaws.DefaultDialer` | for dialer customization     |
-| `WithUpgrader` | `hzws.HertzUpgrader`      | for upgrader customization   |
+| Configuration      | Default                   | Description                                                 |
+|--------------------|---------------------------|-------------------------------------------------------------|
+| `WithDirector`     | `nil`                     | customize the forward header                                |
+| `WithDialer`       | `gorillaws.DefaultDialer` | for dialer customization                                    |
+| `WithUpgrader`     | `hzws.HertzUpgrader`      | for upgrader customization                                  |
+| `WithDynamicRoute` | `false`                   | enable dynamic route (proxy url = handler url + target url) |
 
 ### More info
 See [example](https://github.com/cloudwego/hertz-examples)

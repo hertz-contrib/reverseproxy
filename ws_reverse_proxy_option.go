@@ -28,9 +28,10 @@ type Director func(ctx context.Context, c *app.RequestContext, forwardHeader htt
 type Option func(o *Options)
 
 type Options struct {
-	Director Director
-	Dialer   *websocket.Dialer
-	Upgrader *hzws.HertzUpgrader
+	Director     Director
+	Dialer       *websocket.Dialer
+	Upgrader     *hzws.HertzUpgrader
+	DynamicRoute bool
 }
 
 var DefaultOptions = &Options{
@@ -40,6 +41,7 @@ var DefaultOptions = &Options{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 	},
+	DynamicRoute: false,
 }
 
 func newOptions(opts ...Option) *Options {
@@ -77,5 +79,13 @@ func WithDirector(director Director) Option {
 func WithUpgrader(upgrader *hzws.HertzUpgrader) Option {
 	return func(o *Options) {
 		o.Upgrader = upgrader
+	}
+}
+
+// WithDynamicRoute enable dynamic route
+// proxy url = handler url + target url
+func WithDynamicRoute() Option {
+	return func(o *Options) {
+		o.DynamicRoute = true
 	}
 }

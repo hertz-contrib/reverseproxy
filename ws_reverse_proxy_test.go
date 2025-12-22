@@ -124,3 +124,134 @@ func TestProxy(t *testing.T) {
 	assert.DeepEqual(t, websocket.TextMessage, msgType)
 	assert.DeepEqual(t, msg, string(data))
 }
+
+var dynamicBackendURL = "ws://127.0.0.1:9001/api"
+
+func TestProxyWithDynamicRoute(t *testing.T) {
+	// websocket proxy
+	supportedSubProtocols := []string{"test-protocol"}
+	upgrader := &hzws.HertzUpgrader{
+		ReadBufferSize:  4096,
+		WriteBufferSize: 4096,
+		CheckOrigin: func(c *app.RequestContext) bool {
+			return true
+		},
+		Subprotocols: supportedSubProtocols,
+	}
+
+	// enable dynamic route option
+	proxy := NewWSReverseProxy(dynamicBackendURL, WithUpgrader(upgrader), WithDynamicRoute())
+
+	// proxy server
+	ps := server.Default(server.WithHostPorts(":9000"))
+	ps.NoHijackConnPool = true
+	ps.GET("/test", proxy.ServeHTTP)
+	ps.GET("/test2", proxy.ServeHTTP)
+	go ps.Spin()
+
+	time.Sleep(time.Second * 1)
+
+	go func() {
+		// backend server
+		bs := server.Default(server.WithHostPorts(":9001"))
+		bs.NoHijackConnPool = true
+		bs.GET("/api/test", func(ctx context.Context, c *app.RequestContext) {
+			// Don't upgrade if original host header isn't preserved
+			host := string(c.Host())
+			if host != "127.0.0.1:9000" {
+				hlog.Errorf("Host header set incorrectly.  Expecting 127.0.0.1:9000 got %s", host)
+				return
+			}
+
+			if err := upgrader.Upgrade(c, func(conn *hzws.Conn) {
+				msgType, msg, err := conn.ReadMessage()
+				assert.Nil(t, err)
+
+				if err = conn.WriteMessage(msgType, msg); err != nil {
+					return
+				}
+			}); err != nil {
+				hlog.Errorf("upgrade error: %v", err)
+				return
+			}
+		})
+		bs.GET("/api/test2", func(ctx context.Context, c *app.RequestContext) {
+			// Don't upgrade if original host header isn't preserved
+			host := string(c.Host())
+			if host != "127.0.0.1:9000" {
+				hlog.Errorf("Host header set incorrectly.  Expecting 127.0.0.1:9000 got %s", host)
+				return
+			}
+
+			if err := upgrader.Upgrade(c, func(conn *hzws.Conn) {
+				msgType, msg, err := conn.ReadMessage()
+				assert.Nil(t, err)
+
+				if err = conn.WriteMessage(msgType, msg); err != nil {
+					return
+				}
+			}); err != nil {
+				hlog.Errorf("upgrade error: %v", err)
+				return
+			}
+		})
+		bs.Spin()
+	}()
+
+	time.Sleep(time.Second * 1)
+
+	// only one is supported by the server
+	clientSubProtocols := []string{"test-protocol", "test-notsupported"}
+	h := http.Header{}
+	for _, subproto := range clientSubProtocols {
+		h.Add("Sec-WebSocket-Protocol", subproto)
+	}
+
+	// client
+	conn, resp, err := websocket.DefaultDialer.Dial("ws://127.0.0.1:9000/test", h)
+	assert.Nil(t, err)
+	conn2, resp2, err := websocket.DefaultDialer.Dial("ws://127.0.0.1:9000/test2", h)
+	assert.Nil(t, err)
+
+	// check if the server really accepted the correct protocol
+	in := func(desired string) bool {
+		for _, proto := range resp.Header[http.CanonicalHeaderKey("Sec-WebSocket-Protocol")] {
+			if desired == proto {
+				return true
+			}
+		}
+		return false
+	}
+	in2 := func(desired string) bool {
+		for _, proto := range resp2.Header[http.CanonicalHeaderKey("Sec-WebSocket-Protocol")] {
+			if desired == proto {
+				return true
+			}
+		}
+		return false
+	}
+
+	assert.True(t, in("test-protocol"))
+	assert.True(t, in2("test-protocol"))
+	assert.False(t, in("test-notsupported"))
+	assert.False(t, in2("test-notsupported"))
+
+	// now write a message and send it to the proxy
+	msg := "hello world"
+	err = conn.WriteMessage(websocket.TextMessage, []byte(msg))
+	assert.Nil(t, err)
+
+	msg2 := "hello world2"
+	err = conn2.WriteMessage(websocket.TextMessage, []byte(msg2))
+	assert.Nil(t, err)
+
+	msgType, data, err := conn.ReadMessage()
+	assert.Nil(t, err)
+	assert.DeepEqual(t, websocket.TextMessage, msgType)
+	assert.DeepEqual(t, msg, string(data))
+
+	msgType2, data2, err := conn2.ReadMessage()
+	assert.Nil(t, err)
+	assert.DeepEqual(t, websocket.TextMessage, msgType2)
+	assert.DeepEqual(t, msg2, string(data2))
+}

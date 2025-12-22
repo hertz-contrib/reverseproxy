@@ -39,10 +39,12 @@ func TestOptions(t *testing.T) {
 		WithDirector(director),
 		WithDialer(dialer),
 		WithUpgrader(upgrader),
+		WithDynamicRoute(),
 	)
 	assert.DeepEqual(t, fmt.Sprintf("%p", director), fmt.Sprintf("%p", options.Director))
 	assert.DeepEqual(t, fmt.Sprintf("%p", dialer), fmt.Sprintf("%p", options.Dialer))
 	assert.DeepEqual(t, fmt.Sprintf("%p", upgrader), fmt.Sprintf("%p", options.Upgrader))
+	assert.DeepEqual(t, true, options.DynamicRoute)
 }
 
 func TestDefaultOptions(t *testing.T) {
@@ -50,4 +52,5 @@ func TestDefaultOptions(t *testing.T) {
 	assert.Nil(t, options.Director)
 	assert.DeepEqual(t, DefaultOptions.Dialer, options.Dialer)
 	assert.DeepEqual(t, DefaultOptions.Upgrader, options.Upgrader)
+	assert.DeepEqual(t, DefaultOptions.DynamicRoute, options.DynamicRoute)
 }
